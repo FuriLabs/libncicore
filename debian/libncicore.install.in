@@ -1,1 +1,2 @@
 debian/tmp/@LIBDIR@/libncicore.so.* @LIBDIR@
+debian/libncicore.conf etc
