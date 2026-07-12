@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2018-2026 Slava Monich <slava@monich.com>
  * Copyright (C) 2018-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -58,6 +58,7 @@ static TestOpt test_opt;
 #define CONFIG_SECTION "[Configuration]"
 #define CONFIG_ENTRY_TECHNOLOGIES "Technologies"
 #define CONFIG_ENTRY_LA_NFCID1 "LA_NFCID1"
+#define CONFIG_ENTRY_LI_A_HB "LI_A_HB"
 
 static const guint8 CORE_RESET_CMD[] = {
     0x20, 0x00, 0x01, 0x00
@@ -196,18 +197,19 @@ static const guint8 CORE_SET_CONFIG_RSP_ERROR[] = {
     0x40, 0x02, 0x02, NCI_STATUS_REJECTED, 0x00
 };
 static const guint8 CORE_GET_CONFIG_CMD_DISCOVERY[] = {
-    /* LA_SENS_RES_1, LA_NFCID1, LA_SEL_INFO, LF_PROTOCOL_TYPE */
-    0x20, 0x03, 0x05, 0x04, 0x30, 0x33, 0x32, 0x50
+    /* LA_SENS_RES_1, LA_SEL_INFO, LA_NFCID1, LF_PROTOCOL_TYPE, LI_A_HIST_BY */
+    0x20, 0x03, 0x06, 0x05, 0x30, 0x32, 0x33, 0x50, 0x59 
 };
 static const guint8 CORE_GET_CONFIG_RSP_DISCOVERY_INVALID_PARAM[] = {
     0x40, 0x03, 0x06, NCI_STATUS_INVALID_PARAM, 0x02,
     0x32, 0x00, 0x50, 0x00
 };
 static const guint8 CORE_GET_CONFIG_RSP_NO_LA_SENS_RES_1[] = {
-    0x40, 0x03, 0x0e, 0x00, 0x04,
-    0x33, 0x04, 0x08, 0x00, 0x00, 0x00, /* LA_NFCID1 (dynamic) */
+    0x40, 0x03, 0x10, 0x00, 0x04,
     0x32, 0x01, 0x00, /* LA_SEL_INFO = 0 */
-    0x50, 0x01, 0x00  /* LF_PROTOCOL_TYPE = 0 */
+    0x33, 0x04, 0x08, 0x00, 0x00, 0x00, /* LA_NFCID1 (dynamic) */
+    0x50, 0x01, 0x00, /* LF_PROTOCOL_TYPE = 0 */
+    0x59, 0x00        /* LI_A_HIST_BY (none) */
 };
 static const guint8 CORE_GET_CONFIG_RSP_NFCID_01020304050607[] = {
     0x40, 0x03, 0x14, 0x00, 0x04,
@@ -255,11 +257,12 @@ static const guint8 CORE_GET_CONFIG_RSP_ERROR[] = {
     0x40, 0x03, 0x02, 0x03, 0x00
 };
 static const guint8 CORE_SET_CONFIG_CMD_DISCOVERY_RW_FULL[] = {
-    0x20, 0x02, 0x10, 0x04,
+    0x20, 0x02, 0x12, 0x05,
     0x30, 0x01, 0x00, /* LA_SENS_RES_1 (4 bytes NFCID1) */
-    0x33, 0x04, 0x08, 0x00, 0x00, 0x00, /* LA_NFCID1 (dynamic) */
     0x32, 0x01, 0x00, /* LA_SEL_INFO = 0 */
-    0x50, 0x01, 0x00  /* LF_PROTOCOL_TYPE = 0 */
+    0x33, 0x04, 0x08, 0x00, 0x00, 0x00, /* LA_NFCID1 (dynamic) */
+    0x50, 0x01, 0x00, /* LF_PROTOCOL_TYPE = 0 */
+    0x59, 0x00        /* LI_A_HIST_BY (none) */
 };
 static const guint8 CORE_SET_CONFIG_CMD_DISCOVERY_RW[] = {
     0x20, 0x02, 0x07, 0x02,
@@ -278,20 +281,26 @@ static const guint8 CORE_SET_CONFIG_CMD_DISCOVERY_CE[] = {
 static const guint8 CORE_SET_CONFIG_CMD_NFCID_01020304050607_1[] = {
     0x20, 0x02, 0x10, 0x03,
     0x30, 0x01, 0x40, /* Default LA_SENS_RES_1 for 7 bytes NFCID1 */
-    0x33, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, /* LA_NFCID1 */
-    0x32, 0x01, 0x20  /* LA_SEL_INFO = 0x20 */
+    0x32, 0x01, 0x20, /* LA_SEL_INFO = 0x20 */
+    0x33, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 /* LA_NFCID1 */
 };
 static const guint8 CORE_SET_CONFIG_CMD_NFCID_01020304050607_2[] = {
     0x20, 0x02, 0x10, 0x03,
     0x30, 0x01, 0x44, /* LA_SENS_RES_1 (7 bytes NFCID1) */
-    0x33, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, /* LA_NFCID1 */
-    0x32, 0x01, 0x20  /* LA_SEL_INFO = 0x20 */
+    0x32, 0x01, 0x20, /* LA_SEL_INFO = 0x20 */
+    0x33, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 /* LA_NFCID1 */
 };
 static const guint8 CORE_SET_CONFIG_CMD_NFCID_DYNAMIC[] = {
     0x20, 0x02, 0x0d, 0x03,
     0x30, 0x01, 0x04, /* LA_SENS_RES_1 for dynamic 4 bytes NFCID1 */
-    0x33, 0x04, 0x08, 0x00, 0x00, 0x00, /* LA_NFCID1 (dynamic) */
-    0x32, 0x01, 0x20  /* LA_SEL_INFO = 0x20 */
+    0x32, 0x01, 0x20, /* LA_SEL_INFO = 0x20 */
+    0x33, 0x04, 0x08, 0x00, 0x00, 0x00 /* LA_NFCID1 (dynamic) */
+};
+static const guint8 CORE_SET_CONFIG_CMD_LI_A_HB_01020304[] = {
+    0x20, 0x02, 0x0d, 0x03,
+    0x30, 0x01, 0x00, /* LA_SENS_RES_1 (4 bytes NFCID1) */
+    0x32, 0x01, 0x20, /* LA_SEL_INFO = 0x20 */
+    0x59, 0x04, 0x01, 0x02, 0x03, 0x04  /* LI_A_HIST_BY (01020304) */
 };
 static const guint8 RF_SET_LISTEN_MODE_ROUTING_CMD_MIXED_RW_PEER[] = {
     0x21, 0x01, 0x1b, 0x00, 0x05,
@@ -516,16 +525,29 @@ static const guint8 RF_DISCOVER_CMD_RW_CE_PEER_A_B_F[] = {
     0x85, 0x01, /* ActiveListenF */
     0x82, 0x01  /* PassiveListenF */
 };
+static const guint8 RF_DISCOVER_CMD_RW_CE_A_B[] = {
+    0x21, 0x03, 0x0b, 0x05,
+    0x03, 0x01, /* ActivePollA */
+    0x00, 0x01, /* PassivePollA */
+    0x01, 0x01, /* PassivePollB */
+    0x80, 0x01, /* PassiveListenA */
+    0x81, 0x01  /* PassiveListenB */
+};
 static const guint8 RF_DISCOVER_CMD_RW_CE_A_B_F[] = {
-    0x21, 0x03, 0x11, 0x08,
+    0x21, 0x03, 0x0f, 0x07,
     0x03, 0x01, /* ActivePollA */
     0x00, 0x01, /* PassivePollA */
     0x01, 0x01, /* PassivePollB */
     0x05, 0x01, /* ActivePollF */
     0x02, 0x01, /* PassivePollF */
-    0x83, 0x01, /* ActiveListenA */
     0x80, 0x01, /* PassiveListenA */
     0x81, 0x01  /* PassiveListenB */
+};
+static const guint8 RF_DISCOVER_CMD_RW_CE_A[] = {
+    0x21, 0x03, 0x07, 0x03,
+    0x03, 0x01, /* ActivePollA */
+    0x00, 0x01, /* PassivePollA */
+    0x80, 0x01  /* PassiveListenA */
 };
 static const guint8 RF_DISCOVER_CMD_ALL_A_B[] = {
     0x21, 0x03, 0x0d, 0x06,
@@ -536,13 +558,6 @@ static const guint8 RF_DISCOVER_CMD_ALL_A_B[] = {
     0x80, 0x01, /* PassiveListenA */
     0x81, 0x01  /* PassiveListenB */
 };
-static const guint8 RF_DISCOVER_CMD_ALL_A[] = {
-    0x21, 0x03, 0x09, 0x04,
-    0x03, 0x01, /* ActivePollA */
-    0x00, 0x01, /* PassivePollA */
-    0x83, 0x01, /* ActiveListenA */
-    0x80, 0x01  /* PassiveListenA */
-};
 static const guint8 RF_DISCOVER_CMD_NFCDEP_LISTEN[] = {
     0x21, 0x03, 0x09, 0x04,
     0x83, 0x01, /* ActiveListenA */
@@ -551,13 +566,11 @@ static const guint8 RF_DISCOVER_CMD_NFCDEP_LISTEN[] = {
     0x82, 0x01  /* PassiveListenF */
 };
 static const guint8 RF_DISCOVER_CMD_A_LISTEN[] = {
-    0x21, 0x03, 0x05, 0x02,
-    0x83, 0x01, /* ActiveListenA */
+    0x21, 0x03, 0x03, 0x01,
     0x80, 0x01  /* PassiveListenA */
 };
 static const guint8 RF_DISCOVER_CMD_A_B_LISTEN[] = {
-    0x21, 0x03, 0x07, 0x03,
-    0x83, 0x01, /* ActiveListenA */
+    0x21, 0x03, 0x05, 0x02,
     0x80, 0x01, /* PassiveListenA */
     0x81, 0x01  /* PassiveListenB */
 };
@@ -1209,17 +1222,25 @@ test_null(
     g_assert(!nci_core_add_next_state_changed_handler(NULL, NULL, NULL));
     g_assert(!nci_core_add_intf_activated_handler(NULL, NULL, NULL));
     g_assert(!nci_core_add_data_packet_handler(NULL, NULL, NULL));
+    g_assert(!nci_core_add_params_change_handler(NULL, NULL, NULL));
+    g_assert(!nci_core_add_param_change_handler(NULL, 0, NULL, NULL));
 
     g_assert(!nci_core_add_current_state_changed_handler(nci, NULL, NULL));
     g_assert(!nci_core_add_next_state_changed_handler(nci, NULL, NULL));
     g_assert(!nci_core_add_intf_activated_handler(nci, NULL, NULL));
     g_assert(!nci_core_add_data_packet_handler(nci, NULL, NULL));
+    g_assert(!nci_core_add_params_change_handler(nci, NULL, NULL));
+    g_assert(!nci_core_add_param_change_handler(nci, 0, NULL, NULL));
+    g_assert(!nci_core_add_param_change_handler(nci, NCI_CORE_PARAM_COUNT,
+        NULL, NULL));
     nci_core_remove_handler(nci, 0);
     nci_core_cancel(nci, 0);
 
     g_assert_cmpint(nci_core_get_tech(NULL), == ,NCI_TECH_NONE);
     g_assert_cmpint(nci_core_set_tech(NULL, NCI_TECH_A), == ,NCI_TECH_NONE);
 
+    g_assert(!nci_core_get_param(NULL, 0, NULL));
+    nci_core_reset_param(NULL, 0);
     nci_core_set_params(NULL, NULL, FALSE);
     nci_core_set_state(NULL, NCI_STATE_INIT);
     nci_core_set_op_mode(NULL, NFC_OP_MODE_NONE);
@@ -1228,6 +1249,80 @@ test_null(
     nci_core_restart(NULL);
     nci_core_free(NULL);
 
+    nci_core_free(nci);
+}
+
+/*==========================================================================*
+ * param
+ *==========================================================================*/
+
+static
+void
+test_param_cb(
+    NciCore* nci,
+    NCI_CORE_PARAM id,
+    void* user_data)
+{
+    int* count = user_data;
+
+    /* Only NCI_CORE_PARAM_LLC_WKS is changed by this test */
+    g_assert_cmpint(id, == ,NCI_CORE_PARAM_LLC_WKS);
+    (*count)++;
+}
+
+static
+void
+test_param(
+    void)
+{
+    NCI_CORE_PARAM key;
+    NciCore* nci = nci_core_new(&test_dummy_hal_io);
+    gulong id[NCI_CORE_PARAM_COUNT + 1];
+    int i, n[2];
+
+    const NciCoreParam llc_wks = {
+        .key = NCI_CORE_PARAM_LLC_WKS,
+        .value.uint16 = 0xff
+    };
+    const NciCoreParam* params[] = { &llc_wks,  NULL };
+
+    /* Register param change listeners */
+    memset(n, 0, sizeof(n));
+    for (i = 0; i < NCI_CORE_PARAM_COUNT; i++) {
+        /* For each param (all incrementing the same counter) */
+        id[i] = nci_core_add_param_change_handler(nci, i, test_param_cb, n + 0);
+    }
+    /* and one for all params (increments the second counter) */
+    id[i] = nci_core_add_params_change_handler(nci, test_param_cb, n + 1);
+
+    nci_core_reset_param(nci, NCI_CORE_PARAM_COUNT); /* noop */
+    g_assert_cmpint(n[0], == ,0); /* No signals emitted */
+    g_assert_cmpint(n[1], == ,0);
+
+    g_assert(!nci_core_get_param(nci, (NCI_CORE_PARAM)-1, NULL));
+    g_assert(!nci_core_get_param(nci, NCI_CORE_PARAM_COUNT, NULL));
+    for (key = (NCI_CORE_PARAM)0; key < NCI_CORE_PARAM_COUNT; key++) {
+        NciCoreParamValue value;
+
+        memset(&value, 0, sizeof(value));
+        nci_core_reset_param(nci, key);
+        g_assert(nci_core_get_param(nci, key, NULL));
+        g_assert(nci_core_get_param(nci, key, &value));
+    }
+    g_assert_cmpint(n[0], == ,0); /* Still no signals */
+    g_assert_cmpint(n[1], == ,0);
+
+    /* Now change something */
+    nci_core_set_params(nci, params, FALSE);
+    g_assert_cmpint(n[0], == ,1);
+    g_assert_cmpint(n[1], == ,1);
+
+    /* And then reset it back to default */
+    nci_core_reset_param(nci, llc_wks.key);
+    g_assert_cmpint(n[0], == ,2);
+    g_assert_cmpint(n[1], == ,2);
+
+    nci_core_remove_all_handlers(nci, id);
     nci_core_free(nci);
 }
 
@@ -1328,9 +1423,6 @@ test_init_ok(
     /* Responses */
     test_hal_io_queue_rsp(hal, CORE_RESET_RSP);
     test_hal_io_queue_ntf(hal, CORE_IGNORED_NTF);
-    /* Couple more broken notifications */
-    test_hal_io_queue_ntf(hal, CORE_CONN_CREDITS_BROKEN1_NTF);
-    test_hal_io_queue_ntf(hal, CORE_CONN_CREDITS_BROKEN2_NTF);
     /* Final response */
     test_hal_io_queue_rsp(hal, CORE_INIT_RSP);
     test_hal_io_queue_rsp(hal, CORE_SET_CONFIG_RSP);
@@ -1436,6 +1528,75 @@ test_init_failed2(
     nci_core_free(nci);
     test_hal_io_free(hal);
     g_main_loop_unref(loop);
+}
+
+/*==========================================================================*
+ * init_failed3
+ * init_failed4
+ *==========================================================================*/
+
+static
+void
+test_init_broken_conn_credits_done(
+    NciCore* nci,
+    void* user_data)
+{
+    if (nci->current_state == NCI_STATE_ERROR) {
+        test_quit_later((GMainLoop*)user_data);
+    }
+}
+
+static
+void
+test_init_broken_conn_credits(
+    const guint8* broken_ntf,
+    guint broken_ntf_len)
+{
+    TestHalIo* hal = test_hal_io_new();
+    NciCore* nci = nci_core_new(&hal->io);
+    GMainLoop* loop = g_main_loop_new(NULL, TRUE);
+    gulong id[2];
+
+    nci_core_set_state(nci, NCI_RFST_IDLE);
+    test_hal_io_queue_rsp(hal, CORE_RESET_RSP);
+    test_hal_io_queue_rsp(hal, CORE_INIT_RSP);
+    test_hal_io_queue_rsp(hal, CORE_SET_CONFIG_RSP);
+    test_hal_io_queue_read(hal, broken_ntf, broken_ntf_len, TRUE);
+
+    id[0] = nci_core_add_current_state_changed_handler(nci,
+        test_init_broken_conn_credits_done, loop);
+    id[1] = nci_core_add_data_packet_handler(nci,
+        test_data_packet_handler_not_reached, NULL);
+
+    g_assert(id[0]);
+    g_assert(id[1]);
+
+    test_run_loop(&test_opt, loop);
+
+    g_assert(nci->current_state == NCI_STATE_ERROR);
+    g_assert(nci->next_state == NCI_STATE_ERROR);
+    nci_core_remove_all_handlers(nci, id);
+    nci_core_free(nci);
+    test_hal_io_free(hal);
+    g_main_loop_unref(loop);
+}
+
+static
+void
+test_init_failed3(
+    void)
+{
+    test_init_broken_conn_credits(TEST_ARRAY_AND_SIZE
+        (CORE_CONN_CREDITS_BROKEN1_NTF));
+}
+
+static
+void
+test_init_failed4(
+    void)
+{
+    test_init_broken_conn_credits(TEST_ARRAY_AND_SIZE
+        (CORE_CONN_CREDITS_BROKEN2_NTF));
 }
 
 /*==========================================================================*
@@ -1912,6 +2073,13 @@ static const NciCoreParam TEST_PARAM_LA_NFCID_01020304050607 = {
 };
 static const NciCoreParam* const TEST_PARAMS_LA_NFCID_01020304050607[] = {
     &TEST_PARAM_LA_NFCID_01020304050607, NULL
+};
+static const NciCoreParam TEST_PARAM_LI_A_HB_01020304 = {
+    .key = NCI_CORE_PARAM_LI_A_HB,
+    .value.hb = { 4, { 0x01, 0x02, 0x03, 0x04 } }
+};
+static const NciCoreParam* const TEST_PARAMS_LI_A_HB_01020304[] = {
+    &TEST_PARAM_LI_A_HB_01020304, NULL
 };
 
 static const TestSmEntry test_nci_sm_init_params[] = {
@@ -3371,7 +3539,7 @@ static const TestSmEntry test_nci_sm_nfc_dep_listen_disappear[] = {
     TEST_NCI_SM_QUEUE_RSP(RF_SET_LISTEN_MODE_ROUTING_RSP),\
     TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_MAP_CMD_RW_CE_A_B),\
     TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_MAP_RSP),\
-    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_CMD_ALL_A),\
+    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_CMD_RW_CE_A),\
     TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_RSP),\
     TEST_NCI_SM_QUEUE_NTF(CORE_CONN_CREDITS_NTF),\
     TEST_NCI_SM_WAIT_STATE(NCI_RFST_DISCOVERY)
@@ -3798,7 +3966,7 @@ static const TestSmEntry test_nci_sm_read_ce_ndef_ab[] = {
 
     TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_MAP_CMD_RW_CE_A_B),
     TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_MAP_RSP),
-    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_CMD_ALL_A_B),
+    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_CMD_RW_CE_A_B),
     TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_RSP),
     TEST_NCI_SM_QUEUE_NTF(CORE_CONN_CREDITS_NTF),
     TEST_NCI_SM_WAIT_STATE(NCI_RFST_DISCOVERY),
@@ -3851,6 +4019,39 @@ static const TestSmEntry test_nci_param_la_nfcid1[] = {
     TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_RSP),
 
     TEST_NCI_SM_WAIT_STATE(NCI_RFST_DISCOVERY),
+    TEST_NCI_SM_END()
+};
+
+/* Common part of LI_A_HB tests */
+#define TEST_NCI_PARAM_LI_A() \
+    TEST_NCI_SM_SET_OP_MODE(NFC_OP_MODE_CE), \
+    TEST_NCI_SM_SET_STATE(NCI_RFST_DISCOVERY), \
+    TEST_NCI_SM_ASSERT_STATES(NCI_STATE_INIT, NCI_RFST_DISCOVERY), \
+    TEST_NCI_DEFAULT_RESET_V2(), \
+    \
+    TEST_NCI_SM_ASSERT_STATES(NCI_RFST_IDLE, NCI_RFST_DISCOVERY), \
+    TEST_NCI_SM_EXPECT_CMD(CORE_GET_CONFIG_CMD_DISCOVERY), \
+    TEST_NCI_SM_QUEUE_RSP(CORE_GET_CONFIG_RSP_NO_LA_SENS_RES_1), \
+    TEST_NCI_SM_EXPECT_CMD(CORE_SET_CONFIG_CMD_LI_A_HB_01020304), \
+    TEST_NCI_SM_QUEUE_RSP(CORE_SET_CONFIG_RSP), \
+    TEST_NCI_SM_EXPECT_CMD(RF_SET_LISTEN_MODE_ROUTING_CMD_MIXED_CE_B_A), \
+    TEST_NCI_SM_QUEUE_RSP(RF_SET_LISTEN_MODE_ROUTING_RSP), \
+    \
+    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_MAP_CMD_LISTEN_ISODEP), \
+    TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_MAP_RSP), \
+    TEST_NCI_SM_EXPECT_CMD(RF_DISCOVER_CMD_A_B_LISTEN), \
+    TEST_NCI_SM_QUEUE_RSP(RF_DISCOVER_RSP), \
+    \
+    TEST_NCI_SM_WAIT_STATE(NCI_RFST_DISCOVERY)
+
+static const TestSmEntry test_nci_param_li_a_hb[] = {
+    TEST_NCI_SM_SET_PARAMS(TEST_PARAMS_LI_A_HB_01020304, FALSE),
+    TEST_NCI_PARAM_LI_A(),
+    TEST_NCI_SM_END()
+};
+
+static const TestSmEntry test_nci_param_li_a_hb_conf[] = {
+    TEST_NCI_PARAM_LI_A(),
     TEST_NCI_SM_END()
 };
 
@@ -4032,7 +4233,8 @@ static const char test_nci_config_ab_invalid_la_nfcid1_data1[] =
 static const char test_nci_config_ab_invalid_la_nfcid1_data2[] =
     CONFIG_SECTION "\n"
     CONFIG_ENTRY_TECHNOLOGIES " = A,B\n"
-    CONFIG_ENTRY_LA_NFCID1 " = Garbage!\n";
+    CONFIG_ENTRY_LA_NFCID1 " = Garbage!\n"
+    CONFIG_ENTRY_LI_A_HB " = Junk!\n";
 static const char test_nci_config_la_nfcid1_data[] =
     CONFIG_SECTION "\n"
     CONFIG_ENTRY_TECHNOLOGIES " = A,B\n"
@@ -4041,6 +4243,10 @@ static const char test_nci_config_la_nfcid1_dynamic_data[] =
     CONFIG_SECTION "\n"
     CONFIG_ENTRY_TECHNOLOGIES " = A,B\n"
     CONFIG_ENTRY_LA_NFCID1 " = \n";
+static const char test_nci_config_li_a_hb_data[] =
+    CONFIG_SECTION "\n"
+    CONFIG_ENTRY_TECHNOLOGIES " = A,B\n"
+    CONFIG_ENTRY_LI_A_HB " = 01020304\n";
 
 static const TestNciSmData nci_sm_tests[] = {
     { "init-ok", test_nci_sm_init_ok },
@@ -4127,6 +4333,9 @@ static const TestNciSmData nci_sm_tests[] = {
     { "read-ce-ndef-ab-invalid_la_nfcid1_config2", test_nci_sm_read_ce_ndef_ab,
        test_nci_config_ab_invalid_la_nfcid1_data2 },
     { "param_la_nfcid1", test_nci_param_la_nfcid1, test_nci_config_ab_data },
+    { "param_li_a_hb", test_nci_param_li_a_hb },
+    { "param_li_a_hb_conf", test_nci_param_li_a_hb_conf,
+       test_nci_config_li_a_hb_data },
     { "config_default", test_nci_config_abf, test_nci_config_ab_data_default },
     { "config_empty", test_nci_config_abf, test_nci_config_ab_data_empty },
     { "config_junk", test_nci_config_abf, test_nci_config_ab_data_junk },
@@ -4158,10 +4367,13 @@ int main(int argc, char* argv[])
     G_GNUC_END_IGNORE_DEPRECATIONS;
     g_test_init(&argc, &argv, NULL);
     g_test_add_func(TEST_("null"), test_null);
+    g_test_add_func(TEST_("param"), test_param);
     g_test_add_func(TEST_("restart"), test_restart);
     g_test_add_func(TEST_("init_ok"), test_init_ok);
-    g_test_add_func(TEST_("init_failed1"), test_init_failed1);
-    g_test_add_func(TEST_("init_failed2"), test_init_failed2);
+    g_test_add_func(TEST_("init_failed/1"), test_init_failed1);
+    g_test_add_func(TEST_("init_failed/2"), test_init_failed2);
+    g_test_add_func(TEST_("init_failed/3"), test_init_failed3);
+    g_test_add_func(TEST_("init_failed/4"), test_init_failed4);
     for (i = 0; i < G_N_ELEMENTS(nci_sm_tests); i++) {
         const TestNciSmData* test = nci_sm_tests + i;
         char* path = g_strconcat(TEST_PREFIX "sm/", test->name, NULL);

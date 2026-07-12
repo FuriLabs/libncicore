@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -68,6 +68,7 @@ struct nci_sm {
     guint8 llc_version;
     guint16 llc_wks;
     NciNfcid1 la_nfcid1; /* NFCID1 in Listen A mode */
+    NciAtsHb li_a_hb; /* ATS Historical Bytes in Listen A mode */
 };
 
 typedef
@@ -120,6 +121,11 @@ nci_sm_free(
     NCI_INTERNAL;
 
 void
+nci_sm_reset(
+    NciSm* sm)
+    NCI_INTERNAL;
+
+void
 nci_sm_set_op_mode(
     NciSm* sm,
     NCI_OP_MODE op_mode)
@@ -135,6 +141,12 @@ void
 nci_sm_set_la_nfcid1(
     NciSm* sm,
     const NciNfcid1* nfcid1)
+    NCI_INTERNAL;
+
+void
+nci_sm_set_li_a_hb(
+    NciSm* sm,
+    const NciAtsHb* hb)
     NCI_INTERNAL;
 
 void

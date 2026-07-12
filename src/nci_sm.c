@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2024 Slava Monich <slava@monich.com>
+ * Copyright (C) 2019-2025 Slava Monich <slava@monich.com>
  * Copyright (C) 2019-2021 Jolla Ltd.
  *
  * You may use this file under the terms of the BSD license as follows:
@@ -77,6 +77,7 @@ typedef struct nci_sm_object {
     guint pending_switch_id;
     guint32 pending_signals;
     NciNfcid1 default_la_nfcid1;
+    NciAtsHb default_li_a_hb;
 } NciSmObject;
 
 typedef struct nci_sm_switch {
@@ -112,6 +113,7 @@ const char* nci_sm_config_file = "/etc/libncicore.conf";
 static const char CONFIG_SECTION[] = "Configuration";
 static const char CONFIG_LIST_SEPARATORS[] = ";,";
 static const char CONFIG_ENTRY_LA_NFCID1[] = "LA_NFCID1";
+static const char CONFIG_ENTRY_LI_A_HB[] = "LI_A_HB";
 static const char CONFIG_ENTRY_TECHNOLOGIES[] = "Technologies";
 static const char CONFIG_TECH_TYPE_A[] = "A";
 static const char CONFIG_TECH_TYPE_B[] = "B";
@@ -491,7 +493,7 @@ nci_sm_parse_config(
         CONFIG_ENTRY_LA_NFCID1, NULL);
     if (sval) {
         NciNfcid1* nfcid1 = &nci_sm_object_cast(sm)->default_la_nfcid1;
-        const gsize len = strlen(sval = g_strstrip(sval));
+        const gsize len = strlen(g_strstrip(sval));
 
         /* NFCID1 can be 4, 7, or 10 bytes long */
         switch (len) {
@@ -514,6 +516,29 @@ nci_sm_parse_config(
         default:
             GWARN("Invalid LA_NFCID1 '%s' in configuration", sval);
             break;
+        }
+        g_free(sval);
+    }
+
+    /* LI_A_HB */
+    sval = g_key_file_get_string(config, CONFIG_SECTION,
+        CONFIG_ENTRY_LI_A_HB, NULL);
+    if (sval) {
+        const gsize len = strlen(g_strstrip(sval));
+        NciAtsHb hb;
+
+        if (len <= 2*sizeof(hb.bytes) && gutil_hex2bin(sval, len, hb.bytes)) {
+            NciAtsHb* out =  &nci_sm_object_cast(sm)->default_li_a_hb;
+
+            GDEBUG("  %s %s", CONFIG_ENTRY_LI_A_HB, len ? sval : "(none)");
+            out->len = (guint8)(len / 2);
+            memcpy(out->bytes, hb.bytes, out->len);
+            if (out->len < sizeof(out->bytes)) {
+                memset(out->bytes + out->len, 0, sizeof(out->bytes) - len);
+            }
+        } else {
+            GWARN("Invalid %s '%s' in configuration",
+                CONFIG_ENTRY_LI_A_HB, sval);
         }
         g_free(sval);
     }
@@ -543,7 +568,7 @@ nci_sm_load_config(
 
 static
 void
-nci_sm_reset(
+nci_sm_restart(
     NciSm* sm)
 {
     if (sm->next_state->state > NCI_RFST_IDLE) {
@@ -796,6 +821,31 @@ nci_sm_free(
 }
 
 void
+nci_sm_reset(
+    NciSm* sm)
+{
+    NciSmObject* self = nci_sm_object_cast(sm);
+
+    if (G_LIKELY(self)) {
+        NciState* init = nci_sm_state_by_id(self, NCI_STATE_INIT);
+        NciState* idle = nci_sm_state_by_id(self, NCI_RFST_IDLE);
+
+        /* Cancel queued actions */
+        if (self->pending_switch_id) {
+            g_source_remove(self->pending_switch_id);
+            self->pending_switch_id = 0;
+        }
+        if (self->next_transition) {
+            nci_transition_unref(self->next_transition);
+            self->next_transition = NULL;
+        }
+        nci_sm_enter_state_internal(self, init, NULL);
+        nci_sm_switch_internal(self, idle);
+        nci_sm_emit_pending_signals(self);
+    }
+}
+
+void
 nci_sm_set_op_mode(
     NciSm* sm,
     NCI_OP_MODE op_mode)
@@ -809,7 +859,7 @@ nci_sm_set_op_mode(
          */
         GDEBUG("Mode 0x%02x => 0x%02x", sm->op_mode, op_mode);
         sm->op_mode = op_mode;
-        nci_sm_reset(sm);
+        nci_sm_restart(sm);
     }
 }
 
@@ -829,7 +879,7 @@ nci_sm_set_tech(
          */
         GDEBUG("Tech 0x%04x => 0x%04x", sm->techs, valid_techs);
         sm->techs = valid_techs;
-        nci_sm_reset(sm);
+        nci_sm_restart(sm);
         return valid_techs;
     }
     return NCI_TECH_NONE;
@@ -838,7 +888,7 @@ nci_sm_set_tech(
 /*
  * N.B. This internal function is called by nci_core_set_params() which
  * detects the changes and, if necessary, restarts the state machine to
- * reconfigure NFCC.
+ * reconfigure NFCC (i.e. there's no need to restart it here)
  */
 void
 nci_sm_set_la_nfcid1(
@@ -862,7 +912,7 @@ nci_sm_set_la_nfcid1(
                     if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
                         char* tmp = NULL;
 
-                        GDEBUG("LA_NFCID1 => %s", dynamic ? "Dynamic" :
+                        GDEBUG("LA_NFCID1 => %s", dynamic ? "(dynamic)" :
                             (tmp = gutil_bin2hex(nfcid1->bytes, nfcid1->len,
                              FALSE)));
                         g_free(tmp);
@@ -882,7 +932,44 @@ nci_sm_set_la_nfcid1(
             }
         } else {
             /* Reset to default */
+            GDEBUG("LA_NFCID1 => (default)");
             *out = nci_sm_object_cast(sm)->default_la_nfcid1;
+        }
+    }
+}
+
+/*
+ * N.B. This internal function is called by nci_core_set_params() which
+ * detects the changes and, if necessary, restarts the state machine to
+ * reconfigure NFCC (i.e. there's no need to restart it here)
+ */
+void
+nci_sm_set_li_a_hb(
+    NciSm* sm,
+    const NciAtsHb* hb)
+{
+    if (G_LIKELY(sm)) {
+        NciAtsHb* out = &sm->li_a_hb;
+
+        if (hb) {
+#if GUTIL_LOG_DEBUG
+            if (GLOG_ENABLED(GLOG_LEVEL_DEBUG)) {
+                char* tmp = NULL;
+
+                GDEBUG("LI_A_HB => %s", (!hb->len) ? "(empty)" :
+                    (tmp = gutil_bin2hex(hb->bytes, hb->len, FALSE)));
+                g_free(tmp);
+            }
+#endif
+            out->len = MIN(hb->len, sizeof(hb->bytes));
+            memcpy(out->bytes, hb->bytes, out->len);
+            if (out->len < sizeof(hb->bytes)) {
+                memset(out->bytes + out->len, 0, sizeof(hb->bytes) - out->len);
+            }
+        } else {
+            /* Reset to default */
+            GDEBUG("LI_A_HB => (default)");
+            *out = nci_sm_object_cast(sm)->default_li_a_hb;
         }
     }
 }
